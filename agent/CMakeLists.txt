@@ -7,7 +7,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -Werror -std=c++11
 
 include_directories(/usr/lib/jvm/java-1.7.0-openjdk-amd64/include)
 
-find_package( Boost 1.55 COMPONENTS system REQUIRED)
+find_package( Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR} "../control")
 
 add_library(jvmti_sts SHARED jvmti_sts.cpp)

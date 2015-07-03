@@ -7,7 +7,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -Werror -std=c++11
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package( Boost 1.55 COMPONENTS system REQUIRED)
+find_package( Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 add_executable(sts_control sts_control.cpp)
