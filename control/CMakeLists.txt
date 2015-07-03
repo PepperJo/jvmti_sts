@@ -10,6 +10,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 find_package( Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+set(EXECUTABLE_OUTPUT_PATH ${dir})
+
 add_executable(sts_control sts_control.cpp)
 target_link_libraries(sts_control ${Boost_LIBRARIES} pthread)
 # set_property(TARGET sts_control PROPERTY CXX_STANDARD 11)

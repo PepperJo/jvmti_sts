@@ -10,6 +10,8 @@ include_directories(/usr/lib/jvm/java-1.7.0-openjdk-amd64/include)
 find_package( Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR} "../control")
 
+set(LIBRARY_OUTPUT_PATH ${dir})
+
 add_library(jvmti_sts SHARED jvmti_sts.cpp)
 target_link_libraries(jvmti_sts ${Boost_LIBRARIES})
 # set_property(TARGET jvmti_sts PROPERTY CXX_STANDARD 11)
