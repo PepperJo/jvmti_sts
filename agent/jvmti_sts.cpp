@@ -141,7 +141,6 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
             history.push_back({});
             auto& event = history.back();
             event.time_point = std::chrono::high_resolution_clock::now();
-            jint n_threads;
             jvmtiError err = jvm_env->GetAllStackTraces(max_frame_count,
                     &event.stack_info, &event.n_threads);
             if (err != JVMTI_ERROR_NONE) {
