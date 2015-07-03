@@ -38,7 +38,8 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
     using namespace std::chrono;
 
     pid_t pid = getpid();
-    std::ofstream file(filename + "_" + std::to_string(pid));
+    std::ofstream file(filename + "_" +
+            std::to_string(static_cast<long long>(pid)));
 
     file << pid << "\n";
     for (auto& event : history) {
