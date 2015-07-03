@@ -42,7 +42,9 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
             std::to_string(static_cast<long long>(pid)));
 
     file << pid << "\n";
-    for (auto& event : history) {
+    for (auto iter = history.begin(); iter != history.end(); iter++) {
+        auto& event = *iter;
+
         jvmtiError err;
         auto tse = event.time_point.time_since_epoch();
         file << duration_cast<milliseconds>(tse).count() << "\n";
@@ -109,11 +111,9 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
 
     while (!end) {
         boost::system::error_code asio_error;
-        client_socket->non_blocking(false, asio_error);
-        if (asio_error) {
-            std::cerr << "unable to set socket to blocking\n";
-            goto detach;
-        }
+
+        boost::asio::socket_base::non_blocking_io command(false);
+        client_socket->io_control(command);
 
         char buffer[max_command_size];
         boost::asio::read(*client_socket, boost::asio::buffer(buffer,
@@ -129,11 +129,8 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
         }
         std::chrono::milliseconds period(start_cmd->period_ms);
 
-        client_socket->non_blocking(true, asio_error);
-        if (asio_error) {
-            std::cerr << "unable to set socket to non blocking\n";
-            goto detach;
-        }
+        command = false;
+        client_socket->io_control(command);
 
         ThreadStackInfosHistory history;
         std::string filename;
