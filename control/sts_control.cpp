@@ -28,7 +28,8 @@ public:
     void send_command(T&& command)
     {
         std::lock_guard<std::mutex> lock(m_);
-        for (auto& socket : clients_) {
+        for (auto iter = clients_.begin(); iter != clients_.end(); iter++) {
+            auto& socket = *iter;
             boost::asio::async_write(*socket,
                     boost::asio::buffer(&command, sizeof(command)),
                 [this, socket](boost::system::error_code ec, std::size_t len)
@@ -108,18 +109,18 @@ int main(int argc, char* argv[])
 
         bool started = false;
         for (;;) {
-            std::cout << "#> ";
+
+            if (!started) {
+                std::cout << "#start(sample period in ms)> ";
+            } else {
+                std::cout << "#dump(filename)> ";
+            }
+
 
             std::string line;
             std::getline(std::cin, line);
             std::stringstream ss(line);
-            std::string cmd;
-            ss >> cmd;
-            if (cmd == "dump") {
-                if (!started) {
-                    std::cout << "Not started\n";
-                    continue;
-                }
+            if (started) {
                 std::string filename;
                 ss >> filename;
                 if (filename.empty()) {
@@ -129,7 +130,7 @@ int main(int argc, char* argv[])
                 s.send_command(DumpCommand{filename});
                 std::cout << "dumping collected stack traces...\n";
                 started = false;
-            } else if (cmd == "start") {
+            } else {
                 std::uint32_t period_ms = 0;
                 ss >> period_ms;
                 if (period_ms == 0) {
@@ -141,10 +142,6 @@ int main(int argc, char* argv[])
                 std::cout << "start sampling stack traces every "
                     << period_ms << "ms...\n";
                 started = true;
-            } else if (cmd.empty()) {
-                /* do nothing */
-            } else {
-                std::cout << "unknown command: " << cmd << "\n";
             }
         }
     }
