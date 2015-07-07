@@ -9,6 +9,7 @@
 #include <chrono>
 
 #include <boost/asio.hpp>
+#include <boost/bind.hpp>
 
 #include <sts_control.h>
 
@@ -24,6 +25,21 @@ public:
         do_accept();
     }
 
+    void send_complete(std::shared_ptr<tcp::socket> socket,
+            boost::system::error_code ec)
+    {
+        if (ec) {
+            std::cerr << "\n! writing command failed: "
+                << ec << "\n";
+            std::cerr << "! removing "
+                << socket->remote_endpoint().address().to_string()
+                << "\n";
+            // std::lock_guard<std::mutex> lock(m_);
+            // clients_.erase(
+            //     std::find(clients_.begin(), clients_.end(), socket));
+        }
+    }
+
     template<class T>
     void send_command(T&& command)
     {
@@ -32,42 +48,36 @@ public:
             auto& socket = *iter;
             boost::asio::async_write(*socket,
                     boost::asio::buffer(&command, sizeof(command)),
-                [this, socket](boost::system::error_code ec, std::size_t len)
-                {
-                    if (ec) {
-                        std::cerr << "\n! writing command failed: "
-                            << ec << "\n";
-                        std::cerr << "! removing "
-                            << socket->remote_endpoint().address().to_string()
-                            << "\n";
-                        std::lock_guard<std::mutex> lock(m_);
-                        clients_.erase(
-                            std::find(clients_.begin(), clients_.end(), socket));
-                    }
-                });
+                    boost::asio::transfer_all(),
+                    boost::bind(&server::send_complete, this,
+                        socket, boost::asio::placeholders::error));
         }
     }
 private:
+    void read_complete(std::shared_ptr<tcp::socket> socket, std::shared_ptr<char> buffer,
+            boost::system::error_code ec)
+    {
+        if (ec) {
+            std::cerr << "\n! socket closed: "
+                << ec << "\n";
+            std::cerr << "! removing "
+                << socket->remote_endpoint().address().to_string()
+                << "\n";
+            std::lock_guard<std::mutex> lock(m_);
+            clients_.erase(
+                std::find(clients_.begin(), clients_.end(), socket));
+        } else {
+            do_read(socket);
+        }
+    }
+
     void do_read(std::shared_ptr<tcp::socket> socket)
     {
         auto buffer = std::make_shared<char>();
         socket->async_read_some(boost::asio::buffer(&buffer, sizeof(*buffer)),
-                [this, buffer, socket](boost::system::error_code ec,
-                    std::size_t len)
-               {
-                    if (ec) {
-                        std::cerr << "\n! socket closed: "
-                            << ec << "\n";
-                        std::cerr << "! removing "
-                            << socket->remote_endpoint().address().to_string()
-                            << "\n";
-                        std::lock_guard<std::mutex> lock(m_);
-                        clients_.erase(
-                            std::find(clients_.begin(), clients_.end(), socket));
-                    } else {
-                        do_read(socket);
-                    }
-                });
+                boost::bind(&server::read_complete, this,
+                    socket, buffer,
+                    boost::asio::placeholders::error));
     }
 
     void do_accept()
@@ -105,7 +115,8 @@ int main(int argc, char* argv[])
         boost::asio::io_service io_service;
 
         server s(io_service, std::atoi(argv[1]));
-        std::thread t([&]() { io_service.run(); } );
+        std::thread t(boost::bind(&boost::asio::io_service::run,
+                    boost::ref(io_service)));
 
         bool started = false;
         for (;;) {
@@ -127,7 +138,7 @@ int main(int argc, char* argv[])
                     std::cout << "no filename specifed\n";
                     continue;
                 }
-                s.send_command(DumpCommand{filename});
+                s.send_command(DumpCommand(filename));
                 std::cout << "dumping collected stack traces...\n";
                 started = false;
             } else {
