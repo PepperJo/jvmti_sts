@@ -129,7 +129,7 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
         }
         std::chrono::milliseconds period(start_cmd->period_ms);
 
-        command = false;
+        command = true;
         client_socket->io_control(command);
 
         ThreadStackInfosHistory history;
