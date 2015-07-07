@@ -80,22 +80,24 @@ private:
                     boost::asio::placeholders::error));
     }
 
+    void accept_completed(boost::system::error_code ec)
+    {
+        if (!ec) {
+            std::cerr << "\n! new client "
+                << socket_.remote_endpoint().address().to_string()
+                << "\n";
+            std::lock_guard<std::mutex> lock(m_);
+            clients_.push_back(
+                std::make_shared<tcp::socket>(std::move(socket_)));
+        }
+        do_accept();
+        do_read(clients_.back());
+    }
+
     void do_accept()
     {
-        acceptor_.async_accept(socket_,
-            [this](boost::system::error_code ec)
-            {
-                if (!ec) {
-                    std::cerr << "\n! new client "
-                        << socket_.remote_endpoint().address().to_string()
-                        << "\n";
-                    std::lock_guard<std::mutex> lock(m_);
-                    clients_.push_back(
-                        std::make_shared<tcp::socket>(std::move(socket_)));
-                }
-                do_accept();
-                do_read(clients_.back());
-            });
+        acceptor_.async_accept(socket_, boost::bind(&server::accept_completed,
+                    this, boost::asio::placeholders::error));
     }
 
     tcp::acceptor acceptor_;
