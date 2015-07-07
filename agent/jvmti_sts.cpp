@@ -117,7 +117,7 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
 
         char buffer[max_command_size];
         boost::asio::read(*client_socket, boost::asio::buffer(buffer,
-                    sizeof(StartCommand)), asio_error);
+                    sizeof(StartCommand)), boost::asio::transfer_all(), asio_error);
         if (asio_error) {
             std::cerr << "unable to read from socket (" << asio_error << "\n";
             goto detach;
