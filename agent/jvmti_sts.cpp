@@ -213,8 +213,7 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM* jvm, char* options, void* reserved)
         return JNI_ERR;
     }
     const jvmtiEvent events[] = {JVMTI_EVENT_VM_INIT, JVMTI_EVENT_VM_DEATH};
-//    for (auto event : events) {
-    for (unsigned int i=0; i<sizeof(events); i++) {
+    for (std::uint32_t i = 0; i < sizeof(events)/sizeof(*events); i++) {
         auto& event = events[i];
         jvmti_err = jvm_env->SetEventNotificationMode(JVMTI_ENABLE,
                 event, NULL);
