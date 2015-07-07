@@ -20,7 +20,7 @@ class server
 public:
     server(boost::asio::io_service& io_service, short port)
         : acceptor_(io_service, tcp::endpoint(tcp::v4(), port)),
-        socket_(io_service)
+        io_service_(io_service)
     {
         do_accept();
     }
@@ -80,15 +80,15 @@ private:
                     boost::asio::placeholders::error));
     }
 
-    void accept_completed(boost::system::error_code ec)
+    void accept_completed(std::shared_ptr<tcp::socket> socket,
+            boost::system::error_code ec)
     {
         if (!ec) {
             std::cerr << "\n! new client "
-                << socket_.remote_endpoint().address().to_string()
+                << socket->remote_endpoint().address().to_string()
                 << "\n";
             std::lock_guard<std::mutex> lock(m_);
-            clients_.push_back(
-                std::make_shared<tcp::socket>(std::move(socket_)));
+            clients_.push_back(socket);
         }
         do_accept();
         do_read(clients_.back());
@@ -96,12 +96,14 @@ private:
 
     void do_accept()
     {
-        acceptor_.async_accept(socket_, boost::bind(&server::accept_completed,
-                    this, boost::asio::placeholders::error));
+        auto socket = std::make_shared<tcp::socket>(io_service_);
+        acceptor_.async_accept(*socket, boost::bind(&server::accept_completed,
+                    this, socket, boost::asio::placeholders::error));
     }
 
     tcp::acceptor acceptor_;
-    tcp::socket socket_;
+    boost::asio::io_service& io_service_;
+    // tcp::socket socket_;
     std::mutex m_;
     std::vector<std::shared_ptr<tcp::socket>> clients_;
 };
