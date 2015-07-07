@@ -235,8 +235,7 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM* jvm, char* options, void* reserved)
         return JNI_ERR;
     }
     boost::system::error_code asio_error;
-    boost::asio::connect(*client_socket,
-            resolver.resolve({str_options[0], str_options[1]}),
+    client_socket->connect(resolver.resolve({str_options[0], str_options[1]}),
             asio_error);
     if (asio_error) {
         std::cerr << "unable to connect to " << str_options[0] << ":"
