@@ -151,7 +151,8 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
 
             /* check if control wants us to dump */
             boost::asio::read(*client_socket, boost::asio::buffer(buffer,
-                        sizeof(DumpCommand)), asio_error);
+                        sizeof(DumpCommand)), boost::asio::transfer_all(),
+                    asio_error);
             if (asio_error && asio_error != boost::asio::error::would_block) {
                 std::cerr << "Unable to read from socket ("
                     << asio_error << "\n";
