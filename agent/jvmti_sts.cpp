@@ -136,7 +136,7 @@ static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
         std::string filename;
         while (!end) {
             /* take sample */
-            history.push_back({});
+            history.push_back(ThreadStackInfos());
             auto& event = history.back();
             event.time_point = std::chrono::high_resolution_clock::now();
             jvmtiError err = jvm_env->GetAllStackTraces(max_frame_count,
@@ -194,7 +194,7 @@ static void JNICALL cbVMDeath(jvmtiEnv* jvmti, JNIEnv* env)
 
 JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM* jvm, char* options, void* reserved)
 {
-    jvmtiEnv* jvm_env = nullptr;
+    jvmtiEnv* jvm_env = NULL;
     jint ret = jvm->GetEnv(reinterpret_cast<void**>(&jvm_env),
             JVMTI_VERSION_1_2);
     if (ret != JNI_OK) {
@@ -212,9 +212,11 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM* jvm, char* options, void* reserved)
         return JNI_ERR;
     }
     const jvmtiEvent events[] = {JVMTI_EVENT_VM_INIT, JVMTI_EVENT_VM_DEATH};
-    for (auto event : events) {
+//    for (auto event : events) {
+    for (unsigned int i=0; i<sizeof(events); i++) {
+        auto& event = events[i];
         jvmti_err = jvm_env->SetEventNotificationMode(JVMTI_ENABLE,
-                event, nullptr);
+                event, NULL);
         if (jvmti_err != JVMTI_ERROR_NONE) {
             std::cerr << "Unable to set event notification mode enable ("
                 << jvmti_err << ")\n";
