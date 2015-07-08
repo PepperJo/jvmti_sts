@@ -35,18 +35,19 @@ ENDIF()
 MESSAGE(STATUS "JAVA_DIR is set to ${JAVA_DIR}")
 
 include_directories(${JAVA_DIR}/include)
+include_directories(${JAVA_DIR}/include/linux)
 
 find_package(Boost COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR} "../control")
 #execute_process(COMMAND "echo ${Boost_LIBRARY_DIRS} | sed 's/lib64\\/lib64/lib64/g'" OUTPUT_VARIABLE Boost_New_LIBRARY_DIRS)
 link_directories(${Boost_LIBRARY_DIRS})
 
-IF(${CMAKE_BUILD_TYPE} MATCHES DEBUG)
-    get_cmake_property(_variableNames VARIABLES)
-    foreach (_variableName ${_variableNames})
-        message(STATUS "${_variableName}=${${_variableName}}")
-    endforeach()
-ENDIF()
+#IF(${CMAKE_BUILD_TYPE} MATCHES DEBUG)
+#    get_cmake_property(_variableNames VARIABLES)
+#    foreach (_variableName ${_variableNames})
+#        message(STATUS "${_variableName}=${${_variableName}}")
+#    endforeach()
+#ENDIF()
 
 ##
 # Subdirectories
