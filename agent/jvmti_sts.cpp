@@ -32,6 +32,128 @@ struct ThreadStackInfos {
 };
 typedef std::vector<ThreadStackInfos> ThreadStackInfosHistory;
 
+static jvmtiError print_klass(jvmtiEnv* jvm_env, jclass klass,
+        std::ostream& out)
+{
+    char* signature; char* generic;
+    jvmtiError err = jvm_env->GetClassSignature(klass, &signature, &generic);
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to get class signature ("
+            << err << ")\n";
+        return err;
+    }
+
+    if (signature) {
+        out << signature;
+        err = jvm_env->Deallocate(
+                reinterpret_cast<unsigned char*>(signature));
+        if (err != JVMTI_ERROR_NONE) {
+            std::cerr << "Unable to Deallocate (" << err << ")\n";
+            return err;
+        }
+    }
+
+    if (generic) {
+        out << generic;
+        err = jvm_env->Deallocate(
+                reinterpret_cast<unsigned char*>(generic));
+        if (err != JVMTI_ERROR_NONE) {
+            std::cerr << "Unable to Deallocate (" << err << ")\n";
+            return err;
+        }
+    }
+    return JVMTI_ERROR_NONE;
+}
+
+static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
+        std::ostream& out)
+{
+    char* name; char* signature; char* generic;
+    jvmtiError err = jvm_env->GetMethodName(frame.method, &name,
+            &signature, &generic);
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to get method name (" << err << ")\n";
+        return err;
+    }
+
+    if (name) {
+        out << name;
+        err = jvm_env->Deallocate(
+                reinterpret_cast<unsigned char*>(name));
+        if (err != JVMTI_ERROR_NONE) {
+            std::cerr << "Unable to Deallocate (" << err << ")\n";
+            return err;
+        }
+    }
+    if (generic) {
+        out << generic;
+        err = jvm_env->Deallocate(
+                reinterpret_cast<unsigned char*>(generic));
+        if (err != JVMTI_ERROR_NONE) {
+            std::cerr << "Unable to Deallocate (" << err << ")\n";
+            return err;
+        }
+    }
+    if (signature) {
+        out << signature;
+        err = jvm_env->Deallocate(
+                reinterpret_cast<unsigned char*>(signature));
+        if (err != JVMTI_ERROR_NONE) {
+            std::cerr << "Unable to Deallocate (" << err << ")\n";
+            return err;
+        }
+    }
+
+    return JVMTI_ERROR_NONE;
+}
+
+static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
+        jmethodID method, jlocation location, std::ostream& out)
+{
+    char* name;
+    jvmtiError err = jvm_env->GetSourceFileName(klass, &name);
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to get source file name (" << err << ")\n";
+        return err;
+    }
+    err = jvm_env->Deallocate(
+            reinterpret_cast<unsigned char*>(name));
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to Deallocate (" << err << ")\n";
+        return err;
+    }
+
+    out << name << " : ";
+
+    jint entries;
+    jvmtiLineNumberEntry* table;
+    err = jvm_env->GetLineNumberTable(method, &entries, &table);
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to get line number table (" << err << ")\n";
+        return err;
+    }
+
+    jint i;
+    for (i = 0; i < entries; i++) {
+        if (table[i].start_location > location) {
+            break;
+        }
+    }
+    if (i == 0) {
+        out << "?";
+    } else {
+        out << table[i - 1].line_number;
+    }
+    err = jvm_env->Deallocate(
+            reinterpret_cast<unsigned char*>(table));
+    if (err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to Deallocate (" << err << ")\n";
+        return err;
+    }
+
+    return JVMTI_ERROR_NONE;
+}
+
 static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
         const std::string& filename)
 {
@@ -71,27 +193,40 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
             file << " (" << si.state << ")\n";
             for (int fi = 0; fi < si.frame_count; fi++) {
                 auto& frame = si.frame_buffer[fi];
-                char* name;
-                char* signature;
-                char* generic;
-                err = jvm_env->GetMethodName(frame.method, &name,
-                        &signature, &generic);
+
+                jclass klass;
+                err = jvm_env->GetMethodDeclaringClass(frame.method, &klass);
                 if (err != JVMTI_ERROR_NONE) {
-                    std::cerr << "Unable to get method name (" << err << ")\n";
+                    std::cerr << "Unable to get method declaring class ("
+                        << err << ")\n";
                     return;
                 }
 
                 file << "\t#" << fi << " ";
-                if (name) {
-                    file << name;
+                err = print_klass(jvm_env, klass, file);
+                if (err != JVMTI_ERROR_NONE) {
+                    std::cerr << "Unable to print klass (" << err << ")\n";
+                    return;
                 }
-                if (generic) {
-                    file << generic;
-                }
-                if (signature) {
-                    file << signature;
+                err = print_method(jvm_env, frame, file);
+                if (err != JVMTI_ERROR_NONE) {
+                    std::cerr << "Unable to print klass (" << err << ")\n";
+                    return;
                 }
                 file << " : " << frame.location << "\n";
+                file << "\t   ";
+
+                if (frame.location == -1) {
+                    file << "NATIVE";
+                } else {
+                    err = print_source(jvm_env, klass, frame.method,
+                            frame.location, file);
+                    if (err != JVMTI_ERROR_NONE) {
+                        std::cerr << "Unable to print klass (" << err << ")\n";
+                        return;
+                    }
+                }
+                file << "\n";
             }
         }
         file << std::endl;
@@ -209,11 +344,19 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM* jvm, char* options, void* reserved)
         return JNI_ERR;
     }
 
+    auto cap = new jvmtiCapabilities{0};
+    cap->can_get_source_file_name = 1;
+    cap->can_get_line_numbers = 1;
+    jvmtiError jvmti_err = jvm_env->AddCapabilities(cap);
+    if (jvmti_err != JVMTI_ERROR_NONE) {
+        std::cerr << "Unable to add capability (" << jvmti_err << ")\n";
+        return JNI_ERR;
+    }
+
     jvmtiEventCallbacks callbacks = {};
     callbacks.VMInit = &cbVMInit;
     callbacks.VMDeath = &cbVMDeath;
-    jvmtiError jvmti_err = jvm_env->SetEventCallbacks(&callbacks,
-            sizeof(callbacks));
+    jvmti_err = jvm_env->SetEventCallbacks(&callbacks, sizeof(callbacks));
     if (jvmti_err != JVMTI_ERROR_NONE) {
         std::cerr << "Unable to set event callback (" << jvmti_err << ")\n";
         return JNI_ERR;
