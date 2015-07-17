@@ -19,8 +19,19 @@
 #include <sts_control.h>
 
 #define INDENT(x) std::string(x, ' ')
+#define JVMTI_CALL(stmt, errmsg, onError)\
+  do {\
+    jvmtiError err = (stmt);\
+    if (err != JVMTI_ERROR_NONE) {\
+      cerr << "In JVMTI call " << stmt << " got ERROR: " << "\n";\
+      cerr << errmsg << "\n";\
+      onError;\
+    }\
+  } while(0);
 
 using boost::asio::ip::tcp;
+using namespace std;
+
 static std::shared_ptr<tcp::socket> client_socket;
 
 static const std::uint32_t max_frame_count = 32;
@@ -37,34 +48,24 @@ typedef std::vector<ThreadStackInfos> ThreadStackInfosHistory;
 static jvmtiError print_class(jvmtiEnv* jvm_env, jclass klass,
         std::ostream& out, int indent)
 {
+    char *signature; 
+    char *generic;
     indent += 1;
-    char* signature; char* generic;
-    jvmtiError err = jvm_env->GetClassSignature(klass, &signature, &generic);
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to get class signature ("
-            << err << ")\n";
-        return err;
-    }
+    JVMTI_CALL(jvm_env->GetClassSignature(klass, &signature, &generic), 
+               "Unable to get class signature", return err);
 
     if (signature) {
-        out << INDENT(indent) << "'CLASS.signature' : '''" << signature << "''', \n";
-        err = jvm_env->Deallocate(
-                reinterpret_cast<unsigned char*>(signature));
-        if (err != JVMTI_ERROR_NONE) {
-            std::cerr << "Unable to Deallocate (" << err << ")\n";
-            return err;
-        }
+       out << INDENT(indent) << "'CLASS.signature' : '''" << signature << "''', \n";
+       JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(signature)),
+                  "Unable to Deallocate", return err);      
     }
 
     if (generic) {
         out << INDENT(indent) << " 'CLASS.generic' : '''" << generic <<  "''', \n";
-        err = jvm_env->Deallocate(
-                reinterpret_cast<unsigned char*>(generic));
-        if (err != JVMTI_ERROR_NONE) {
-            std::cerr << "Unable to Deallocate (" << err << ")\n";
-            return err;
+        JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(generic)),
+                   "Unable to Deallocate", return err);
         }
-    }
+
     return JVMTI_ERROR_NONE;
 }
 
@@ -72,40 +73,25 @@ static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
         std::ostream& out, int indent)
 {
     indent += 1;
-    char* name; char* signature; char* generic;
-    jvmtiError err = jvm_env->GetMethodName(frame.method, &name,
-            &signature, &generic);
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to get method name (" << err << ")\n";
-        return err;
-    }
-
+    char *name ; 
+    char *signature; 
+    char *generic;
+    JVMTI_CALL(jvm_env->GetMethodName(frame.method, &name, &signature, &generic),
+               "Unable to get method name", return err);
     if (name) {
         out << INDENT(indent) << "'METHOD.name' : '''" << name <<  "''', \n";
-        err = jvm_env->Deallocate(
-                reinterpret_cast<unsigned char*>(name));
-        if (err != JVMTI_ERROR_NONE) {
-            std::cerr << "Unable to Deallocate (" << err << ")\n";
-            return err;
-        }
+        JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(name)),
+                   "Unable to Deallocate ", return err);
     }
     if (generic) {
         out << INDENT(indent) << "'METHOD.generic' : '''" << generic <<  "''', \n";
-        err = jvm_env->Deallocate(
-                reinterpret_cast<unsigned char*>(generic));
-        if (err != JVMTI_ERROR_NONE) {
-            std::cerr << "Unable to Deallocate (" << err << ")\n";
-            return err;
-        }
+        JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(generic)),
+                   "Unable to Deallocate ", return err);
     }
     if (signature) {
         out << INDENT(indent) << "'METHOD.signature' : '''" << signature  << "''', \n";
-        err = jvm_env->Deallocate(
-                reinterpret_cast<unsigned char*>(signature));
-        if (err != JVMTI_ERROR_NONE) {
-            std::cerr << "Unable to Deallocate (" << err << ")\n";
-            return err;
-        }
+        JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(signature)),
+                   "Unable to Deallocate", return err);
     }
 
     return JVMTI_ERROR_NONE;
@@ -115,29 +101,17 @@ static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
         jmethodID method, jlocation location, std::ostream& out, int indent)
 {
     indent += 1;
-    char* name;
-    jvmtiError err = jvm_env->GetSourceFileName(klass, &name);
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to get source file name (" << err << ")\n";
-        return err;
-    }
-    err = jvm_env->Deallocate(
-            reinterpret_cast<unsigned char*>(name));
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to Deallocate (" << err << ")\n";
-        return err;
-    }
-
-    out << INDENT(indent) << "'SOURCE.name' : '''" << name << "''', \n";
+    char *name;
+    JVMTI_CALL(jvm_env->GetSourceFileName(klass, &name),
+               "Unable to get source file name", return err);
+    out << INDENT(indent) << "'SOURCE.name' : '''" << std::string(name) << "''', \n";
+    JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(name)),
+               "Unable to Deallocate", return err);
 
     jint entries;
     jvmtiLineNumberEntry* table;
-    err = jvm_env->GetLineNumberTable(method, &entries, &table);
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to get line number table (" << err << ")\n";
-        return err;
-    }
-
+    JVMTI_CALL(jvm_env->GetLineNumberTable(method, &entries, &table),
+               "Unable to get line number table", return err);
     jint i;
     for (i = 0; i < entries; i++) {
         if (table[i].start_location > location) {
@@ -149,12 +123,8 @@ static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
     } else {
         out << INDENT(indent) << "'SOURCE.linenumber' : " << table[i - 1].line_number << "\n";
     }
-    err = jvm_env->Deallocate(
-            reinterpret_cast<unsigned char*>(table));
-    if (err != JVMTI_ERROR_NONE) {
-        std::cerr << "Unable to Deallocate (" << err << ")\n";
-        return err;
-    }
+    JVMTI_CALL(jvm_env->Deallocate(reinterpret_cast<unsigned char*>(table)),
+               "Unable to Deallocate", return err);
 
     return JVMTI_ERROR_NONE;
 }
@@ -212,7 +182,6 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
             for (int fi = 0; fi < si.frame_count; fi++) {
                 indent = 7;
                 file << INDENT(indent) << fi << " : { \n";
-//                file << "'NUMBER' : " << fi << ", \n";
                 auto& frame = si.frame_buffer[fi];
 
                 jclass klass;
@@ -234,7 +203,6 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
                 }
                 if (frame.location == -1) {
                     file << INDENT(indent) << " 'Location' : None" << ", \n";
-//                    file << "NATIVE";
                 } else {
                     err = print_source(jvm_env, klass, frame.method,
                             frame.location, file, indent);
