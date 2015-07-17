@@ -18,6 +18,8 @@
 
 #include <sts_control.h>
 
+#define INDENT(x) std::string(x, ' ')
+
 using boost::asio::ip::tcp;
 static std::shared_ptr<tcp::socket> client_socket;
 
@@ -32,9 +34,10 @@ struct ThreadStackInfos {
 };
 typedef std::vector<ThreadStackInfos> ThreadStackInfosHistory;
 
-static jvmtiError print_klass(jvmtiEnv* jvm_env, jclass klass,
-        std::ostream& out)
+static jvmtiError print_class(jvmtiEnv* jvm_env, jclass klass,
+        std::ostream& out, int indent)
 {
+    indent += 1;
     char* signature; char* generic;
     jvmtiError err = jvm_env->GetClassSignature(klass, &signature, &generic);
     if (err != JVMTI_ERROR_NONE) {
@@ -44,7 +47,7 @@ static jvmtiError print_klass(jvmtiEnv* jvm_env, jclass klass,
     }
 
     if (signature) {
-        out << signature;
+        out << INDENT(indent) << "'CLASS.signature' : '''" << signature << "''', \n";
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(signature));
         if (err != JVMTI_ERROR_NONE) {
@@ -54,7 +57,7 @@ static jvmtiError print_klass(jvmtiEnv* jvm_env, jclass klass,
     }
 
     if (generic) {
-        out << generic;
+        out << INDENT(indent) << " 'CLASS.generic' : '''" << generic <<  "''', \n";
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(generic));
         if (err != JVMTI_ERROR_NONE) {
@@ -66,8 +69,9 @@ static jvmtiError print_klass(jvmtiEnv* jvm_env, jclass klass,
 }
 
 static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
-        std::ostream& out)
+        std::ostream& out, int indent)
 {
+    indent += 1;
     char* name; char* signature; char* generic;
     jvmtiError err = jvm_env->GetMethodName(frame.method, &name,
             &signature, &generic);
@@ -77,7 +81,7 @@ static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
     }
 
     if (name) {
-        out << name;
+        out << INDENT(indent) << "'METHOD.name' : '''" << name <<  "''', \n";
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(name));
         if (err != JVMTI_ERROR_NONE) {
@@ -86,7 +90,7 @@ static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
         }
     }
     if (generic) {
-        out << generic;
+        out << INDENT(indent) << "'METHOD.generic' : '''" << generic <<  "''', \n";
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(generic));
         if (err != JVMTI_ERROR_NONE) {
@@ -95,7 +99,7 @@ static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
         }
     }
     if (signature) {
-        out << signature;
+        out << INDENT(indent) << "'METHOD.signature' : '''" << signature  << "''', \n";
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(signature));
         if (err != JVMTI_ERROR_NONE) {
@@ -108,8 +112,9 @@ static jvmtiError print_method(jvmtiEnv* jvm_env, jvmtiFrameInfo& frame,
 }
 
 static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
-        jmethodID method, jlocation location, std::ostream& out)
+        jmethodID method, jlocation location, std::ostream& out, int indent)
 {
+    indent += 1;
     char* name;
     jvmtiError err = jvm_env->GetSourceFileName(klass, &name);
     if (err != JVMTI_ERROR_NONE) {
@@ -123,7 +128,7 @@ static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
         return err;
     }
 
-    out << name << " : ";
+    out << INDENT(indent) << "'SOURCE.name' : '''" << name << "''', \n";
 
     jint entries;
     jvmtiLineNumberEntry* table;
@@ -140,9 +145,9 @@ static jvmtiError print_source(jvmtiEnv* jvm_env, jclass klass,
         }
     }
     if (i == 0) {
-        out << "?";
+        out << INDENT(indent) << "'SOURCE.linenumber' : 'None' \n";
     } else {
-        out << table[i - 1].line_number;
+        out << INDENT(indent) << "'SOURCE.linenumber' : " << table[i - 1].line_number << "\n";
     }
     err = jvm_env->Deallocate(
             reinterpret_cast<unsigned char*>(table));
@@ -169,29 +174,45 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
     std::ofstream file(filename + "_" + hostname + "_" +
             std::to_string(static_cast<long long>(pid)));
 
-    file << pid << "\n";
+    int indent = 0;
+    file << INDENT(indent) << "{ ";
+    indent = 1;
+    file << INDENT(indent) << "'PID' : "<< pid << ",\n";
+    file << INDENT(indent) << "'SAMPLES' : [ " << "\n";
     for (auto iter = history.begin(); iter != history.end(); iter++) {
-        auto& event = *iter;
+        indent = 2;
+        file << INDENT(indent) << "{";
 
+        auto& event = *iter;
         jvmtiError err;
         auto tse = event.time_point.time_since_epoch();
-        file << duration_cast<milliseconds>(tse).count() << "\n";
-        for (int ti = 0; ti < event.n_threads; ti++) {
-            auto& si = event.stack_info[ti];
 
+        indent = 3;
+        file << INDENT(indent) << "'SYSTIME' : " << duration_cast<milliseconds>(tse).count() << ",\n";
+        file << INDENT(indent) << "'THREADS' : [ " << "\n";
+        for (int ti = 0; ti < event.n_threads; ti++) {
+            indent = 4;
+            file << INDENT(indent) << " { \n";
+            indent = 5;
+            auto& si = event.stack_info[ti];
             jvmtiThreadInfo thread_info;
             err = jvm_env->GetThreadInfo(si.thread, &thread_info);
             if (err != JVMTI_ERROR_NONE) {
                 std::cerr << "Unable to get thread info (" << err << ")\n";
                 return;
             }
-            file << "#" << ti << " ";
+            file << INDENT(indent) << "'ID' : " << ti << ",\n";
             if (thread_info.name) {
-                file << thread_info.name;
+                file << INDENT(indent) << "'ThreadName' : '''" << thread_info.name << "''' ,\n";
             }
 
-            file << " (" << si.state << ")\n";
+            file << INDENT(indent) << "'ThreadState' : " << si.state << ",\n";
+            file << INDENT(indent) << "'FRAMES' : { " << "\n";
+            indent = 6;
             for (int fi = 0; fi < si.frame_count; fi++) {
+                indent = 7;
+                file << INDENT(indent) << fi << " : { \n";
+//                file << "'NUMBER' : " << fi << ", \n";
                 auto& frame = si.frame_buffer[fi];
 
                 jclass klass;
@@ -201,43 +222,50 @@ static void do_dump(jvmtiEnv* jvm_env, const ThreadStackInfosHistory& history,
                         << err << ")\n";
                     return;
                 }
-
-                file << "\t#" << fi << " ";
-                err = print_klass(jvm_env, klass, file);
+                err = print_class(jvm_env, klass, file, indent);
                 if (err != JVMTI_ERROR_NONE) {
-                    std::cerr << "Unable to print klass (" << err << ")\n";
+                    std::cerr << "Unable to print class (" << err << ")\n";
                     return;
                 }
-                err = print_method(jvm_env, frame, file);
+                err = print_method(jvm_env, frame, file, indent);
                 if (err != JVMTI_ERROR_NONE) {
-                    std::cerr << "Unable to print klass (" << err << ")\n";
+                    std::cerr << "Unable to print class (" << err << ")\n";
                     return;
                 }
-                file << " : " << frame.location << "\n";
-                file << "\t   ";
-
                 if (frame.location == -1) {
-                    file << "NATIVE";
+                    file << INDENT(indent) << " 'Location' : None" << ", \n";
+//                    file << "NATIVE";
                 } else {
                     err = print_source(jvm_env, klass, frame.method,
-                            frame.location, file);
+                            frame.location, file, indent);
                     if (err != JVMTI_ERROR_NONE) {
-                        std::cerr << "Unable to print klass (" << err << ")\n";
+                        std::cerr << "Unable to print class (" << err << ")\n";
                         return;
                     }
                 }
-                file << "\n";
-            }
-        }
+                file << INDENT(indent) << " }, \n";
+            } /* end frames */
+            indent = 5;
+            file << INDENT(indent) << "}" << "\n";
+            indent = 4;
+            file << INDENT(indent) << "}, " << "\n";
+        } /* end threads */
+        indent = 3;
+        file << INDENT(indent) << "]" << "\n";
         file << std::endl;
-
         err = jvm_env->Deallocate(
                 reinterpret_cast<unsigned char*>(event.stack_info));
         if (err != JVMTI_ERROR_NONE) {
             std::cerr << "Unable to Deallocate (" << err << ")\n";
             return;
         }
-    }
+        indent = 2;
+        file << INDENT(indent) << "}, " << "\n";
+    } /* end samples */
+    indent = 1;
+    file << INDENT(indent) << "]" << "\n";
+    indent = 0;
+    file << INDENT(indent) << "} " << "\n";
 }
 
 static void sample_stacktrace(JavaVM* jvm, jvmtiEnv* jvm_env)
